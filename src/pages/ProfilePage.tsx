@@ -608,7 +608,7 @@ export function ProfilePage() {
             type="button"
             onClick={() => setShowProductForm((current) => !current)}
           >
-            {showProductForm ? 'Hide new product' : 'Sell new product'}
+            {showProductForm ? 'Hide new product' : 'Sell product'}
           </button>
         </div>
       ) : null}

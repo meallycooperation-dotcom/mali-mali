@@ -1,8 +1,9 @@
 import type { ChangeEvent, FormEvent } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Home, Search, CircleUserRound, UserRound, MessageCircle, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
+import { supabase } from '../../lib/supabase'
 import logo from '../../assets/logo.jpg'
 
 export function AppShell() {
@@ -10,6 +11,57 @@ export function AppShell() {
   const navigate = useNavigate()
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const client = supabase
+
+    if (!client || !user) {
+      return
+    }
+
+    let isMounted = true
+
+    const loadUnreadCount = async () => {
+      if (!isMounted) return
+
+      const { data: participantData } = await client
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', user.id)
+
+      if (!isMounted) return
+
+      const conversationIds = Array.from(
+        new Set(((participantData ?? []) as { conversation_id: string }[]).map((row) => row.conversation_id)),
+      )
+
+      if (conversationIds.length === 0) {
+        setUnreadCount(0)
+        return
+      }
+
+      const { data: messageData } = await client
+        .from('messages')
+        .select('id')
+        .in('conversation_id', conversationIds)
+        .neq('sender_id', user.id)
+        .eq('is_read', false)
+
+      if (isMounted) {
+        setUnreadCount((messageData ?? []).length)
+      }
+    }
+
+    loadUnreadCount()
+
+    const interval = setInterval(loadUnreadCount, 30000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [user])
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -116,6 +168,9 @@ export function AppShell() {
               </Link>
               <Link className="ghost-button shell-message-button" to="/inbox" aria-label="Messages">
                 <MessageCircle size={18} />
+                {unreadCount > 0 && (
+                  <span className="inbox-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                )}
                 <span className="sr-only">Messages</span>
               </Link>
             </>
