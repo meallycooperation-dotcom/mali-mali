@@ -1,37 +1,47 @@
 import type { ChangeEvent, FormEvent } from 'react'
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Home, Search, CircleUserRound, UserRound, MessageCircle } from 'lucide-react'
+import { Home, Search, CircleUserRound, UserRound, MessageCircle, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
+import logo from '../../assets/logo.jpg'
 
 export function AppShell() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchExpanded, setSearchExpanded] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
 
-  const handleSearch = (event: FormEvent<HTMLFormElement>) => {
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const query = searchValue.trim()
+    if (query) {
+      navigate(`/?q=${encodeURIComponent(query)}`)
+      setSearchExpanded(false)
+    }
+  }
 
-    const formData = new FormData(event.currentTarget)
-    const rawQuery = String(formData.get('q') ?? '')
-    const query = rawQuery.trim()
-    navigate(query ? `/?q=${encodeURIComponent(rawQuery)}` : '/')
+  const handleSearchToggle = () => {
+    setSearchExpanded(!searchExpanded)
+    if (!searchExpanded) {
+      setTimeout(() => document.getElementById('header-search')?.focus(), 100)
+    }
   }
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const rawQuery = event.target.value
-    const query = rawQuery.trim()
-    navigate(query ? `/?q=${encodeURIComponent(rawQuery)}` : '/', { replace: true })
+    setSearchValue(event.target.value)
+  }
+
+  const handleInputClear = () => {
+    setSearchValue('')
+    document.getElementById('header-search')?.focus()
   }
 
   return (
     <div className="app-shell">
       <header className="shell-header">
         <Link to="/" className="brand">
-          <span className="brand-mark">MM</span>
-          <span className="brand-copy">
-            <strong>Mali Mali</strong>
-            <small>Refurbished marketplace</small>
-          </span>
+          <img src={logo} alt="Mali Mali" className="brand-logo" />
         </Link>
 
         <nav className="shell-nav" aria-label="Primary">
@@ -47,33 +57,55 @@ export function AppShell() {
             <span className="sr-only">Home</span>
           </NavLink>
           <NavLink
-            to="/profile"
+            to="/following"
             className={({ isActive }) =>
               isActive ? 'shell-link shell-link-active' : 'shell-link'
             }
-            aria-label="Profile"
+            aria-label="Following"
           >
             <UserRound size={18} />
-            <span className="sr-only">Profile</span>
+            <span className="sr-only">Following</span>
           </NavLink>
         </nav>
 
-        <form className="shell-search" onSubmit={handleSearch} role="search">
-          <label className="sr-only" htmlFor="header-search">
-            Search products
-          </label>
-          <input
-            id="header-search"
-            className="shell-search-input"
-            type="search"
-            name="q"
-            placeholder="Search products"
-            defaultValue={new URLSearchParams(location.search).get('q') ?? ''}
-            onChange={handleSearchChange}
-          />
-          <button className="shell-search-button" type="submit" aria-label="Search">
+        <form className={`shell-search ${searchExpanded ? 'shell-search-expanded' : ''}`} onSubmit={handleSearchSubmit} role="search">
+          <button 
+            type="button" 
+            className="shell-search-toggle" 
+            onClick={handleSearchToggle}
+            aria-label="Search"
+          >
             <Search size={18} />
           </button>
+          {searchExpanded ? (
+            <>
+              <input
+                id="header-search"
+                className="shell-search-input"
+                type="search"
+                name="q"
+                placeholder="Search products"
+                value={searchValue}
+                onChange={handleSearchChange}
+                autoFocus
+              />
+              {searchValue && (
+                <button type="button" className="shell-search-clear" onClick={handleInputClear} aria-label="Clear search">
+                  <X size={16} />
+                </button>
+              )}
+            </>
+          ) : (
+            <input
+              id="header-search"
+              className="shell-search-input"
+              type="search"
+              name="q"
+              placeholder="Search products"
+              value={searchValue}
+              onChange={handleSearchChange}
+            />
+          )}
         </form>
 
         <div className="shell-actions">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { MessageSquareText, ArrowRight } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
@@ -256,16 +256,7 @@ export function InboxPage() {
 
   return (
     <section className="page page-inbox">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Inbox</p>
-          <h1>Messages</h1>
-          <p>Keep track of your conversations with buyers and sellers here.</p>
-        </div>
-        <Link className="ghost-button" to="/profile">
-          Back to profile
-        </Link>
-      </div>
+      
 
       {loading ? <p className="market-status">Loading conversations...</p> : null}
       {error ? <p className="market-status market-status-error">{error}</p> : null}

@@ -20,10 +20,12 @@ type ProductRow = {
 type SellerRow = {
   id: string
   full_name: string
+  avatar_url: string | null
 }
 
 type MarketplaceProduct = ProductRow & {
   seller_name: string
+  seller_avatar_url: string | null
   comments_count: number
   likes_count: number
   liked_by_me: boolean
@@ -123,7 +125,20 @@ export function HomePage() {
   const [commentError, setCommentError] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [likeError, setLikeError] = useState('')
+  const [followedSellerIds, setFollowedSellerIds] = useState<string[]>([])
   const query = searchParams.get('q')?.trim().toLowerCase() ?? ''
+
+  // Toggle follow a seller
+  const toggleFollowSeller = async (sellerId: string) => {
+    if (!user?.id) return
+    if (followedSellerIds.includes(sellerId)) {
+      const { error } = await (supabase as any).from('follows').delete().match({ follower_id: user.id, following_id: sellerId })
+      if (!error) setFollowedSellerIds((prev) => prev.filter((id) => id !== sellerId))
+    } else {
+      const { error } = await (supabase as any).from('follows').insert({ follower_id: user.id, following_id: sellerId })
+      if (!error) setFollowedSellerIds((prev) => [...prev, sellerId])
+    }
+  }
 
   useEffect(() => {
     const client = supabase
@@ -258,11 +273,12 @@ export function HomePage() {
       ) as string[]
 
       let sellerMap = new Map<string, string>()
+      let avatarMap = new Map<string, string | null>()
 
       if (sellerIds.length > 0) {
         const { data: sellerData, error: sellerError } = await client
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, avatar_url')
           .in('id', sellerIds)
 
         if (!isMounted) {
@@ -281,6 +297,14 @@ export function HomePage() {
             seller.full_name,
           ]),
         )
+
+        // Also build avatar map
+        avatarMap = new Map(
+          ((sellerData ?? []) as SellerRow[]).map((seller) => [
+            seller.id,
+            seller.avatar_url,
+          ]),
+        )
       }
 
       setProducts(
@@ -288,6 +312,8 @@ export function HomePage() {
           ...product,
           seller_name:
             (product.user_id && sellerMap.get(product.user_id)) ?? 'Unknown seller',
+          seller_avatar_url:
+            (product.user_id && avatarMap.get(product.user_id)) ?? null,
           comments_count: commentCounts[product.id] ?? 0,
           likes_count: likeCounts[product.id] ?? 0,
           liked_by_me: likedProductIds.has(product.id),
@@ -305,6 +331,19 @@ export function HomePage() {
           ).filter(Boolean).length,
         })),
       )
+
+      // Load current user's follows to know which sellers they're already following
+      if (user?.id && sellerIds.length > 0) {
+        const { data: followData } = await client
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+        if (followData) {
+          const followedIds = (followData as any[]).map((f: any) => f.following_id).filter((id: string) => sellerIds.includes(id))
+          setFollowedSellerIds(followedIds)
+        }
+      }
+
       setLoading(false)
     }
 
@@ -602,22 +641,52 @@ export function HomePage() {
         {filteredProducts.map((product) => (
           <article className="market-card market-feed-card" key={product.id}>
             <div className="market-post-header">
-                <div className="market-post-author">
-                  <div className="market-post-avatar" aria-hidden="true">
-                    {getInitials(product.seller_name) || 'M'}
+                <div className="market-post-author" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {product.seller_avatar_url ? (
+                      <img
+                        className="market-post-avatar"
+                        src={product.seller_avatar_url}
+                        alt={product.seller_name}
+                        style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div className="market-post-avatar" aria-hidden="true">
+                        {getInitials(product.seller_name) || 'M'}
+                      </div>
+                    )}
+                    <div className="market-post-author-copy">
+                      <span className="market-post-time" style={{ marginRight: 6 }}>{formatPostedAt(product.created_at)}</span>
+                      {product.user_id ? (
+                        <Link className="market-author-link" to={`/profile/${product.user_id}`}>
+                          {product.seller_name}
+                        </Link>
+                      ) : (
+                        <strong>{product.seller_name}</strong>
+                      )}
+                    </div>
                   </div>
-                  <div className="market-post-author-copy">
-                    {product.user_id ? (
-                      <Link className="market-author-link" to={`/profile/${product.user_id}`}>
-                        {product.seller_name}
-                      </Link>
-                  ) : (
-                    <strong>{product.seller_name}</strong>
+                  {product.user_id && product.user_id !== user?.id && (
+                    product.user_id && followedSellerIds.includes(product.user_id) ? (
+                      <button
+                        className="follow-pill following"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFollowSeller(product.user_id!) }}
+                        style={{ padding: '3px 8px', fontSize: '0.7rem', flexShrink: 0 }}
+                      >
+                        Following
+                      </button>
+                    ) : product.user_id ? (
+                      <button
+                        className="follow-pill"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFollowSeller(product.user_id!) }}
+                        style={{ padding: '3px 8px', fontSize: '0.7rem', flexShrink: 0 }}
+                      >
+                        Follow
+                      </button>
+                    ) : null
                   )}
-                  <span className="market-post-time">{formatPostedAt(product.created_at)}</span>
                 </div>
               </div>
-            </div>
 
             <Link className="market-post-content" to={`/product/${product.id}`}>
               <div className="market-image-wrap">

@@ -9,6 +9,7 @@ import { ChatPage } from './pages/ChatPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProductDetailsPage } from './pages/ProductDetailsPage'
 import { SignupPage } from './pages/SignupPage'
+import { FollowingPage } from './pages/FollowingPage'
 import './App.css'
 
 function App() {
@@ -40,6 +41,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/following"
+            element={
+              <ProtectedRoute>
+                <FollowingPage />
               </ProtectedRoute>
             }
           />

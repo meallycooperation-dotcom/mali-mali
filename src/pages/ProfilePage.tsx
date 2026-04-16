@@ -7,7 +7,7 @@ import {
   type FormEvent,
 } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Inbox, Upload, LogOut } from 'lucide-react'
+import { Upload, LogOut } from 'lucide-react'
 import imageCompression from 'browser-image-compression'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
@@ -45,24 +45,6 @@ const CONDITION_LABELS: Record<ProductCondition, string> = {
   C: 'Fair',
 }
 
-const formatJoinedDate = (value: string | null) => {
-  if (!value) {
-    return 'Recently'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Recently'
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
-}
-
 export function ProfilePage() {
   const { profileId } = useParams()
   const navigate = useNavigate()
@@ -74,6 +56,40 @@ export function ProfilePage() {
   const avatarInputRef = useRef<HTMLInputElement | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [myProducts, setMyProducts] = useState<UserProductRecord[]>([])
+  const [followedProductIds, setFollowedProductIds] = useState<string[]>([])
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const formatProductDate = (value: string | null) => {
+    if (!value) return ''
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(d)
+  }
+  const toggleFollowProduct = async (pid: string) => {
+    // determine seller id for this product
+    const product = myProducts.find((p) => p.id === pid)
+    const sellerId = product?.user_id
+    if (!user?.id || !sellerId) {
+      return
+    }
+    if (followedProductIds.includes(pid)) {
+      // optional unfollow: delete the relation
+      const { error } = await (supabase as any).from('follows').delete().match({ follower_id: user!.id, following_id: sellerId as string })
+      if (!error) {
+        setFollowedProductIds((prev) => prev.filter((id) => id !== pid))
+      } else {
+        console.error('Unfollow failed:', error)
+      }
+      return
+    }
+    // insert new follow relation
+    const { error } = await (supabase as any).from('follows').insert({ follower_id: user!.id, following_id: sellerId as string })
+    if (!error) {
+      setFollowedProductIds((prev) => [...prev, pid])
+    } else {
+      console.error('Follow failed:', error)
+    }
+  }
   const [sellerInfoMap, setSellerInfoMap] = useState<Record<string, { name: string; avatar_url: string | null }>>({})
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
@@ -93,7 +109,7 @@ export function ProfilePage() {
   const fileInputRefs = useRef<Array<HTMLInputElement | null>>([])
 
   const loadProfile = useCallback(async () => {
-    const client = supabase
+    const client = supabase!
 
     if (!client || !viewedProfileId) {
       setLoadingProfile(false)
@@ -112,11 +128,26 @@ export function ProfilePage() {
     }
 
     setProfile((data as ProfileRecord | null) ?? null)
+
+    // Load follower/following counts for this profile
+    if (viewedProfileId) {
+      const { count: followerCount } = await client
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', viewedProfileId)
+      const { count: followingCount } = await client
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', viewedProfileId)
+      setFollowerCount(followerCount ?? 0)
+      setFollowingCount(followingCount ?? 0)
+    }
+
     setLoadingProfile(false)
   }, [viewedProfileId])
 
   const loadMyProducts = useCallback(async () => {
-    const client = supabase
+    const client = supabase!
 
     if (!client || !viewedProfileId) {
       setLoadingProducts(false)
@@ -147,7 +178,7 @@ export function ProfilePage() {
         .in('id', userIds)
       if (!profileError && profileData) {
         const map: Record<string, { name: string; avatar_url: string | null }> = {}
-        ;(profileData as any[]).forEach((p) => {
+        ;(profileData as { id: string; full_name: string; avatar_url?: string | null }[]).forEach((p) => {
           map[p.id] = {
             name: p.full_name,
             avatar_url: p.avatar_url ?? null,
@@ -378,10 +409,6 @@ export function ProfilePage() {
     }
   }
 
-  const openInbox = () => {
-    navigate('/inbox')
-  }
-
   const startConversationWithSeller = async () => {
     const client = supabase
 
@@ -462,22 +489,12 @@ export function ProfilePage() {
         user?.email?.split('@')[0] ??
         'Member'
       : profile?.full_name ?? 'Member')
-  const joinedDate = formatJoinedDate(
-    (isViewingOwnProfile ? profile?.created_at ?? user?.created_at : profile?.created_at) ?? null,
-  )
   const pageTitle = isViewingOwnProfile ? 'Your profile' : 'Seller profile'
-  const pageDescription = isViewingOwnProfile
-    ? 'This page shows your seller details, your posts, and a hidden form to add a new refurbished item when you need it.'
-    : 'This page shows the seller details and the posts they have shared on Mali Mali.'
-  const summaryTitle = isViewingOwnProfile ? 'Your details' : 'Seller details'
-  const summarySubtitle = isViewingOwnProfile
-    ? 'Everything in one place, without the extra small cards.'
-    : 'Everything we know about this seller in one place.'
   // helper initials for placeholder avatar
   const initials = displayName
     .split(' ')
     .filter(Boolean)
-    .map((p) => p.charAt(0))
+    .map((p: string) => p.charAt(0))
     .slice(0, 2)
     .join('')
 
@@ -506,9 +523,14 @@ export function ProfilePage() {
           <div className="profile-hero-text">
             <p className="eyebrow">{pageTitle}</p>
             <h1>{displayName}</h1>
+            <div className="profile-hero-details">
+              {profile?.email && <span className="profile-hero-detail">✉ {profile.email}</span>}
+              {profile?.phone && <span className="profile-hero-detail">📞 {profile.phone}</span>}
+              {profile?.location && <span className="profile-hero-detail">📍 {profile.location}</span>}
+            </div>
           </div>
         </div>
-        <p>{pageDescription}</p>
+        
         {/* Hidden input for avatar upload */}
         <input
           ref={avatarInputRef}
@@ -517,12 +539,19 @@ export function ProfilePage() {
           accept="image/*"
           onChange={handleAvatarChange}
         />
+        {avatarUploading ? (
+          <span className="avatar-uploading" aria-live="polite">Uploading avatar...</span>
+        ) : null}
       {isViewingOwnProfile ? (
         <div className="profile-actions profile-actions-row">
-          <button className="primary-button profile-toggle-button" type="button" onClick={openInbox}>
-            <Inbox size={18} />
-            Inbox
-          </button>
+          
+          <div className="follower-count-card">
+            <span className="follower-label">Followers</span>
+            <span className="follower-number">{followerCount}</span>
+            <span className="follower-sep">·</span>
+            <span className="follower-label">Following</span>
+            <span className="follower-number">{followingCount}</span>
+          </div>
           <button
             className="ghost-button profile-logout-button"
             type="button"
@@ -570,59 +599,7 @@ export function ProfilePage() {
         <p className="market-status market-status-error">{conversationError}</p>
       ) : null}
 
-      {isViewingOwnProfile ? (
-        <article className="profile-summary-card">
-          <div className="profile-summary-header">
-            <h2>{summaryTitle}</h2>
-            <p>{summarySubtitle}</p>
-          </div>
-
-          <dl className="profile-summary-grid">
-            <div>
-              <dt>Email</dt>
-              <dd>{profile?.email ?? user?.email ?? 'Not available'}</dd>
-            </div>
-            <div>
-              <dt>Full name</dt>
-              <dd>{profile?.full_name ?? displayName}</dd>
-            </div>
-            <div>
-              <dt>Phone</dt>
-              <dd>{profile?.phone ?? 'Not available'}</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd>{profile?.location ?? 'Not available'}</dd>
-            </div>
-            <div>
-              <dt>Avatar URL</dt>
-              <dd>{profile?.avatar_url ?? 'Not available'}</dd>
-            </div>
-            <div>
-              <dt>Created</dt>
-              <dd>{profile?.created_at ?? 'Not available'}</dd>
-            </div>
-            <div>
-              <dt>Updated</dt>
-              <dd>{profile?.updated_at ?? 'Not available'}</dd>
-            </div>
-          </dl>
-        </article>
-      ) : (
-        <article className="profile-summary-card public-profile-card">
-          <div className="profile-summary-header">
-            <h2>Seller details</h2>
-            <p>Quick profile overview for this marketplace seller.</p>
-          </div>
-
-          <dl className="profile-summary-grid">
-            <div>
-              <dt>Joined</dt>
-              <dd>{joinedDate}</dd>
-            </div>
-          </dl>
-        </article>
-      )}
+      {/* Removed the profile-summary-card as details are now in the hero */}
 
       {isViewingOwnProfile ? (
         <div className="profile-actions profile-actions-row">
@@ -800,6 +777,48 @@ export function ProfilePage() {
               to={`/product/${product.id}`}
               className="market-card market-card-link profile-post-card"
             >
+              <div className="market-post-header">
+                <div className="market-post-author" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {sellerInfoMap[product.user_id]?.avatar_url ? (
+                      <img
+                        className="market-post-avatar"
+                        src={sellerInfoMap[product.user_id].avatar_url as string}
+                        alt={sellerInfoMap[product.user_id]?.name ?? 'Seller'}
+                        style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div className="market-post-avatar" aria-hidden="true">
+                        {((sellerInfoMap[product.user_id]?.name ?? product.user_id).split(' ').map((n) => n.charAt(0)).slice(0, 2).join('') || '').toUpperCase() || 'M'}
+                      </div>
+                    )}
+                    <div className="market-post-author-copy">
+                      <span className="market-post-time" style={{ marginRight: 6 }}>{formatProductDate(product.created_at)}</span>
+                      <span className="market-author-link">{sellerInfoMap[product.user_id]?.name ?? 'Seller'}</span>
+                    </div>
+                  </div>
+                  {product.user_id && product.user_id !== user?.id && (
+                    followedProductIds.includes(product.id) ? (
+                      <button
+                        className="follow-pill following"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFollowProduct(product.id) }}
+                        style={{ padding: '3px 8px', fontSize: '0.7rem', flexShrink: 0 }}
+                      >
+                        Following
+                      </button>
+                    ) : (
+                      <button
+                        className="follow-pill"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFollowProduct(product.id) }}
+                        style={{ padding: '3px 8px', fontSize: '0.7rem', flexShrink: 0 }}
+                      >
+                        Follow
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
               <div className="market-image-wrap">
                 {product.image_url ? (
                   <img
@@ -814,39 +833,7 @@ export function ProfilePage() {
 
               <div className="market-card-body">
                 <div className="market-card-top">
-              <div className="market-card-top-left">
-                    {sellerInfoMap[product.user_id]?.avatar_url ? (
-                      <img
-                        className="seller-avatar"
-                        src={sellerInfoMap[product.user_id].avatar_url as string}
-                        alt={sellerInfoMap[product.user_id]?.name ?? 'Seller'}
-                      />
-                    ) : (
-                      <div
-                        className="seller-avatar"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 22,
-                          height: 22,
-                          borderRadius: '50%',
-                          background: 'rgba(0,0,0,0.15)',
-                          color: 'white',
-                          fontSize: '0.8rem',
-                        }}
-                        aria-label="Seller avatar"
-                      >
-                        {sellerInfoMap[product.user_id]?.name
-                          ?.split(' ')
-                          .map((n) => n.charAt(0))
-                          .slice(0, 2)
-                          .join('')
-                          .toUpperCase() ?? product.user_id?.slice(0, 2) ?? ''}
-                      </div>
-                    )}
-                    <h2>{product.name}</h2>
-                  </div>
+                  <h2>{product.name}</h2>
                   <strong>KSh {Number(product.price).toLocaleString()}</strong>
                 </div>
 
