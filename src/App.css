@@ -2036,6 +2036,13 @@
   }
 }
 
+/* On small screens, hide the search input to keep only the icon visible */
+@media (max-width: 520px) {
+  .shell-search-input {
+    display: none;
+  }
+}
+
 .following-section {
   margin-bottom: 32px;
 }
@@ -2124,8 +2131,8 @@
 .user-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
+  gap: 12px;
+  padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2140,8 +2147,8 @@
 }
 
 .user-avatar {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   flex-shrink: 0;
   overflow: hidden;
@@ -2151,7 +2158,7 @@
   background: linear-gradient(135deg, rgba(31, 122, 117, 0.2), rgba(216, 138, 46, 0.22));
   color: var(--teal-dark);
   font-weight: 800;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .user-avatar img {
@@ -2163,13 +2170,13 @@
 .user-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   flex: 1;
   min-width: 0;
 }
 
 .user-info strong {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -2177,15 +2184,36 @@
 }
 
 .user-info small {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
 .user-card .ghost-button,
 .user-card .primary-button {
   flex-shrink: 0;
-  padding: 8px 16px;
-  font-size: 0.85rem;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  min-width: 70px;
+  white-space: nowrap;
+}
+
+/* Sold status toggle button for profile product cards */
+.sold-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.1);
+  background: #2d9cdb;
+  color: white;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+/* Ensure the follow button stays on the right on all screen sizes
+   and does not push the user name off screen on small devices. */
+.user-card .user-action {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 .page-header {

@@ -80,7 +80,16 @@ export function AppShell() {
   }
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setSearchValue(event.target.value)
+    const value = event.target.value
+    setSearchValue(value)
+
+    // Real-time filtering: update query param as user types
+    const q = value.trim()
+    if (q) {
+      navigate(`/?q=${encodeURIComponent(q)}`)
+    } else {
+      navigate('/')
+    }
   }
 
   const handleInputClear = () => {
@@ -135,7 +144,7 @@ export function AppShell() {
                 className="shell-search-input"
                 type="search"
                 name="q"
-                placeholder="Search products"
+                placeholder="search products and users"
                 value={searchValue}
                 onChange={handleSearchChange}
                 autoFocus
@@ -152,7 +161,7 @@ export function AppShell() {
               className="shell-search-input"
               type="search"
               name="q"
-              placeholder="Search products"
+              placeholder="search products and users"
               value={searchValue}
               onChange={handleSearchChange}
             />

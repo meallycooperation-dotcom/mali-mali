@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -13,6 +13,8 @@ type ProfileRecord = {
 
 export function UsersPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const query = (searchParams.get('q') ?? '').toLowerCase().trim()
   const [profiles, setProfiles] = useState<ProfileRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -103,6 +105,11 @@ export function UsersPage() {
       .slice(0, 2)
   }
 
+  const filteredProfiles = profiles.filter((p) => {
+    if (!query) return true
+    return p.full_name.toLowerCase().includes(query)
+  })
+
   return (
     <section className="page page-users">
       <div className="page-header">
@@ -114,19 +121,28 @@ export function UsersPage() {
       {error ? <p className="market-status market-status-error">{error}</p> : null}
 
       {!loading && !error ? (
-        profiles.length === 0 ? (
+        filteredProfiles.length === 0 ? (
           <div className="market-empty">
-            <h2>No users found</h2>
-            <p>Be the first to join!</p>
+            {query ? (
+              <>
+                <h2>No users found</h2>
+                <p>No users match "{query}".</p>
+              </>
+            ) : (
+              <>
+                <h2>No users found</h2>
+                <p>Be the first to join!</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="users-grid">
-            {profiles.map((profile) => (
-              <Link
-                key={profile.id}
-                to={`/profile/${profile.id}`}
-                className="user-card"
-              >
+            {filteredProfiles.map((profile) => (
+                  <Link
+                    key={profile.id}
+                    to={`/profile/${profile.id}`}
+                    className="user-card"
+                  >
                 <div className="user-avatar">
                   {profile.avatar_url ? (
                     <img src={profile.avatar_url} alt={profile.full_name} />
@@ -138,13 +154,15 @@ export function UsersPage() {
                   <strong>{profile.full_name}</strong>
                   {profile.location ? <small>{profile.location}</small> : null}
                 </div>
-                <button
-                  type="button"
-                  className={followingIds.has(profile.id) ? 'ghost-button' : 'primary-button'}
-                  onClick={(e) => handleFollow(e, profile.id)}
-                >
-                  {followingIds.has(profile.id) ? 'Following' : 'Follow'}
-                </button>
+                <div className="user-action">
+                  <button
+                    type="button"
+                    className={followingIds.has(profile.id) ? 'ghost-button' : 'primary-button'}
+                    onClick={(e) => handleFollow(e, profile.id)}
+                  >
+                    {followingIds.has(profile.id) ? 'Following' : 'Follow'}
+                  </button>
+                </div>
               </Link>
             ))}
           </div>

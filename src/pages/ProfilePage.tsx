@@ -90,6 +90,25 @@ export function ProfilePage() {
       console.error('Follow failed:', error)
     }
   }
+
+  const toggleSold = async (pid: string) => {
+    const product = myProducts.find((p) => p.id === pid)
+    if (!product) return
+    const newStatus = product.status === 'sold' ? 'active' : 'sold'
+    try {
+      const { error } = await (supabase as any)
+        .from('products')
+        .update({ status: newStatus })
+        .eq('id', pid)
+      if (!error) {
+        setMyProducts((prev) => prev.map((p) => (p.id === pid ? { ...p, status: newStatus } : p)))
+      } else {
+        console.error('Failed to update product status', error)
+      }
+    } catch (err) {
+      console.error('Error updating product status', err)
+    }
+  }
   const [sellerInfoMap, setSellerInfoMap] = useState<Record<string, { name: string; avatar_url: string | null }>>({})
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
@@ -771,7 +790,7 @@ export function ProfilePage() {
         ) : null}
 
         <div className="profile-posts-grid">
-          {myProducts.map((product) => (
+            {myProducts.map((product) => (
             <Link
               key={product.id}
               to={`/product/${product.id}`}
@@ -797,7 +816,7 @@ export function ProfilePage() {
                       <span className="market-author-link">{sellerInfoMap[product.user_id]?.name ?? 'Seller'}</span>
                     </div>
                   </div>
-                  {product.user_id && product.user_id !== user?.id && (
+                {product.user_id && product.user_id !== user?.id && (
                     followedProductIds.includes(product.id) ? (
                       <button
                         className="follow-pill following"
@@ -816,6 +835,16 @@ export function ProfilePage() {
                       </button>
                     )
                   )}
+                <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8 }}>
+                  <button
+                    type="button"
+                    className="sold-pill"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSold(product.id) }}
+                    aria-label={product.status === 'sold' ? 'Mark as active' : 'Mark as sold'}
+                  >
+                    {product.status === 'sold' ? 'Sold' : 'Mark Sold'}
+                  </button>
+                </div>
                 </div>
               </div>
 
