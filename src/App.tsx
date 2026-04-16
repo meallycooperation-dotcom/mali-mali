@@ -3,6 +3,8 @@ import { AppShell } from './components/layout/AppShell'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { AuthProvider } from './context/AuthProvider'
 import { HomePage } from './pages/HomePage'
+import { useEffect } from 'react'
+import faviconIcon from './assets/favicon.png'
 import { InboxPage } from './pages/InboxPage'
 import { LoginPage } from './pages/LoginPage'
 import { ChatPage } from './pages/ChatPage'
@@ -14,6 +16,21 @@ import { UsersPage } from './pages/UsersPage'
 import './App.css'
 
 function App() {
+  // Set favicon from assets favicon.png
+  useEffect(() => {
+    try {
+      let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
+      if (!link) {
+        link = document.createElement('link') as HTMLLinkElement
+        link.rel = 'icon'
+        link.type = 'image/png'
+        document.head.appendChild(link)
+      }
+      link!.href = faviconIcon as string
+    } catch {
+      // ignore favicon errors
+    }
+  }, [])
   return (
     <AuthProvider>
       <Routes>
