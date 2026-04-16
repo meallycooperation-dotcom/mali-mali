@@ -1,6 +1,6 @@
 import type { ChangeEvent, FormEvent } from 'react'
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Home, Search, CircleUserRound, UserRound, MessageCircle, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import logo from '../../assets/logo.jpg'
@@ -8,7 +8,6 @@ import logo from '../../assets/logo.jpg'
 export function AppShell() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [searchValue, setSearchValue] = useState('')
 
