@@ -325,37 +325,43 @@ export function FollowingPage() {
         <p className="eyebrow">Following</p>
       </div>
 
-      {following.length > 0 && (
-        <div className="following-section">
-          <h3 className="section-title">People you follow</h3>
-          <div className="following-list">
-            {following.map((person) => (
-              <Link key={person.id} to={`/profile/${person.id}`} className="following-card">
-                <div className="following-avatar">
-                  {person.avatar_url ? (
-                    <img src={person.avatar_url} alt={person.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <div className="market-post-avatar">{getInitials(person.full_name || 'M')}</div>
-                  )}
-                </div>
-                <div className="following-info">
-                  <strong className="following-name">{person.full_name ?? 'Unknown'}</strong>
-                </div>
-              </Link>
-            ))}
-          </div>
+      {following.length === 0 ? (
+        <div className="market-empty">
+          <h2>Not following anyone yet</h2>
+          <p>Follow other users to see their posts here.</p>
+          <Link className="primary-button" to="/users">Browse users</Link>
         </div>
-      )}
-
-      <div className="following-section">
-        <h3 className="section-title">Latest from people you follow</h3>
-        {posts.length === 0 ? (
-          <div className="market-empty">
-            <h2>No posts yet</h2>
-            <p>When people you follow post products, they'll appear here.</p>
-            <Link className="primary-button" to="/">Browse products</Link>
+      ) : (
+        <>
+          <div className="following-section">
+            <h3 className="section-title">People you follow</h3>
+            <div className="following-list">
+              {following.map((person) => (
+                <Link key={person.id} to={`/profile/${person.id}`} className="following-card">
+                  <div className="following-avatar">
+                    {person.avatar_url ? (
+                      <img src={person.avatar_url} alt={person.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div className="market-post-avatar">{getInitials(person.full_name || 'M')}</div>
+                    )}
+                  </div>
+                  <div className="following-info">
+                    <strong className="following-name">{person.full_name ?? 'Unknown'}</strong>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
-        ) : (
+
+          <div className="following-section">
+            <h3 className="section-title">Latest from people you follow</h3>
+            {posts.length === 0 ? (
+              <div className="market-empty">
+                <h2>No posts yet</h2>
+                <p>When people you follow post products, they'll appear here.</p>
+                <Link className="primary-button" to="/users">Browse users</Link>
+              </div>
+            ) : (
           <div className="market-grid">
             {posts.map((product) => (
               <article className="market-card market-feed-card" key={product.id}>
@@ -424,6 +430,9 @@ export function FollowingPage() {
           </div>
         )}
       </div>
+
+      </>
+      )}
 
       {commentProduct ? (
         <div className="comments-overlay" role="presentation" onClick={closeComments}>

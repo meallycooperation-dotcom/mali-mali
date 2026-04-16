@@ -10,6 +10,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ProductDetailsPage } from './pages/ProductDetailsPage'
 import { SignupPage } from './pages/SignupPage'
 import { FollowingPage } from './pages/FollowingPage'
+import { UsersPage } from './pages/UsersPage'
 import './App.css'
 
 function App() {
@@ -49,6 +50,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <FollowingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <UsersPage />
               </ProtectedRoute>
             }
           />

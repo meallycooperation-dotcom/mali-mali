@@ -1,7 +1,7 @@
 import type { ChangeEvent, FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Home, Search, CircleUserRound, UserRound, MessageCircle, X } from 'lucide-react'
+import { Home, Search, CircleUserRound, UserRound, MessageCircle, X, Users } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import { supabase } from '../../lib/supabase'
 import logo from '../../assets/logo.jpg'
@@ -162,9 +162,9 @@ export function AppShell() {
         <div className="shell-actions">
           {user ? (
             <>
-              <Link className="ghost-button shell-profile-button" to="/profile" aria-label="Profile">
-                <CircleUserRound size={18} />
-                <span>Profile</span>
+              <Link className="ghost-button" to="/users" aria-label="Users">
+                <Users size={18} />
+                <span className="sr-only">Users</span>
               </Link>
               <Link className="ghost-button shell-message-button" to="/inbox" aria-label="Messages">
                 <MessageCircle size={18} />
@@ -172,6 +172,10 @@ export function AppShell() {
                   <span className="inbox-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
                 )}
                 <span className="sr-only">Messages</span>
+              </Link>
+              <Link className="ghost-button shell-profile-button" to="/profile" aria-label="Profile">
+                <CircleUserRound size={18} />
+                <span>Profile</span>
               </Link>
             </>
           ) : (
