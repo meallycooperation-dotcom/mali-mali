@@ -109,6 +109,96 @@ export function ProfilePage() {
       console.error('Error updating product status', err)
     }
   }
+
+  const deleteProduct = async (pid: string) => {
+    const product = myProducts.find((p) => p.id === pid)
+    if (!product) return
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) return
+    try {
+      const client = supabase as any
+
+      // Delete main product image from storage if exists
+      if (product.image_url && product.image_url.includes('/product-images/')) {
+        const mainPath = product.image_url.split('/product-images/')[1]
+        if (mainPath) {
+          await client.storage.from('product-images').remove([mainPath])
+        }
+      }
+
+      // Fetch and delete gallery images from storage
+      const { data: images } = await client
+        .from('product_images')
+        .select('image_url')
+        .eq('product_id', pid)
+
+      if (images && images.length > 0) {
+        const pathsToDelete = images
+          .map((img: { image_url: string }) => {
+            if (img.image_url && img.image_url.includes('/product-images/')) {
+              return img.image_url.split('/product-images/')[1]
+            }
+            return null
+          })
+          .filter(Boolean)
+
+        if (pathsToDelete.length > 0) {
+          await client.storage.from('product-images').remove(pathsToDelete)
+        }
+      }
+
+      // Delete image records from database
+      await client.from('product_images').delete().eq('product_id', pid)
+
+      // Delete the product
+      const { error } = await client
+        .from('products')
+        .delete()
+        .eq('id', pid)
+      if (!error) {
+        setMyProducts((prev) => prev.filter((p) => p.id !== pid))
+      } else {
+        console.error('Failed to delete product', error)
+      }
+    } catch (err) {
+      console.error('Error deleting product', err)
+    }
+  }
+
+  const handleStartEdit = (product: UserProductRecord) => {
+    setEditingProduct(product)
+    setEditPrice(String(product.price))
+    setEditDescription(product.description ?? '')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingProduct) return
+    try {
+      const { error } = await (supabase as any)
+        .from('products')
+        .update({ 
+          price: editPrice, 
+          description: editDescription 
+        })
+        .eq('id', editingProduct.id)
+      if (!error) {
+        setMyProducts((prev) => prev.map((p) => 
+          p.id === editingProduct.id ? { ...p, price: editPrice, description: editDescription } : p
+        ))
+        setEditingProduct(null)
+      } else {
+        console.error('Failed to update product', error)
+      }
+    } catch (err) {
+      console.error('Error updating product', err)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingProduct(null)
+    setEditPrice('')
+    setEditDescription('')
+  }
+
   const [sellerInfoMap, setSellerInfoMap] = useState<Record<string, { name: string; avatar_url: string | null }>>({})
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
@@ -117,14 +207,17 @@ export function ProfilePage() {
   const [productPrice, setProductPrice] = useState('')
   const [productLocation, setProductLocation] = useState('')
   const [productCondition, setProductCondition] = useState<ProductCondition>('A')
-  const [productImages, setProductImages] = useState<Array<File | null>>(
-    () => Array.from({ length: PRODUCT_IMAGE_SLOTS }, () => null),
+  const [productImages, setProductImages] = useState<Array<{ file: File | null; preview: string | null }>>(
+    () => Array.from({ length: PRODUCT_IMAGE_SLOTS }, () => ({ file: null, preview: null })),
   )
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [productMessage, setProductMessage] = useState('')
   const [productError, setProductError] = useState('')
   const [conversationError, setConversationError] = useState('')
   const [startingConversation, setStartingConversation] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<UserProductRecord | null>(null)
+  const [editPrice, setEditPrice] = useState('')
+  const [editDescription, setEditDescription] = useState('')
   const fileInputRefs = useRef<Array<HTMLInputElement | null>>([])
 
   const loadProfile = useCallback(async () => {
@@ -290,11 +383,23 @@ export function ProfilePage() {
     setProductError('')
     setProductMessage('')
     const nextFile = event.target.files?.[0] ?? null
-    setProductImages((current) => {
-      const next = [...current]
-      next[index] = nextFile
-      return next
-    })
+    if (nextFile) {
+      const preview = URL.createObjectURL(nextFile)
+      setProductImages((current) => {
+        const next = [...current]
+        next[index] = { file: nextFile, preview }
+        return next
+      })
+    } else {
+      setProductImages((current) => {
+        const next = [...current]
+        if (next[index].preview) {
+          URL.revokeObjectURL(next[index].preview!)
+        }
+        next[index] = { file: null, preview: null }
+        return next
+      })
+    }
     event.target.value = ''
   }
 
@@ -312,7 +417,9 @@ export function ProfilePage() {
       return
     }
 
-    const selectedImages = productImages.filter((image): image is File => Boolean(image))
+    const selectedImages = productImages
+      .map((img) => img.file)
+      .filter((file): file is File => Boolean(file))
 
     if (selectedImages.length === 0) {
       setProductError('Please choose at least one product image.')
@@ -410,7 +517,7 @@ export function ProfilePage() {
       setProductPrice('')
       setProductLocation('')
       setProductCondition('A')
-      setProductImages(Array.from({ length: PRODUCT_IMAGE_SLOTS }, () => null))
+      setProductImages(Array.from({ length: PRODUCT_IMAGE_SLOTS }, () => ({ file: null, preview: null })))
       fileInputRefs.current.forEach((input) => {
         if (input) {
           input.value = ''
@@ -519,6 +626,13 @@ export function ProfilePage() {
 
   return (
     <section className="page page-profile">
+      {!isViewingOwnProfile && profile && (
+        <div className="breadcrumb">
+          <Link to="/users">Users</Link>
+          <span className="breadcrumb-separator">›</span>
+          <span>{profile.full_name}'s Profile</span>
+        </div>
+      )}
       <div className="profile-hero">
         <div className="profile-hero-header">
           {profile?.avatar_url ? (
@@ -712,13 +826,13 @@ export function ProfilePage() {
                 {productImages.map((image, index) => (
                   <label
                     key={index}
-                    className={`product-image-slot${image ? ' product-image-slot-filled' : ''}`}
+                    className={`product-image-slot${image.file ? ' product-image-slot-filled' : ''}`}
                   >
-                    {image ? (
-                      <span className="product-image-preview">
-                        <strong>Image {index + 1}</strong>
-                        <small>{image.name}</small>
-                      </span>
+                    {image.file && image.preview ? (
+                      <div className="product-image-preview">
+                        <img src={image.preview} alt={`Preview ${index + 1}`} />
+                        <small>{image.file.name}</small>
+                      </div>
                     ) : (
                       <>
                         <span className="product-image-plus">+</span>
@@ -838,12 +952,32 @@ export function ProfilePage() {
                 <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8 }}>
                   <button
                     type="button"
+                    className="edit-pill"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartEdit(product) }}
+                    aria-label="Edit product"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
                     className="sold-pill"
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSold(product.id) }}
                     aria-label={product.status === 'sold' ? 'Mark as active' : 'Mark as sold'}
+                    style={{ marginLeft: 6 }}
                   >
                     {product.status === 'sold' ? 'Sold' : 'Mark Sold'}
                   </button>
+                  {product.status === 'sold' && (
+                    <button
+                      type="button"
+                      className="delete-pill"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProduct(product.id) }}
+                      aria-label="Delete product"
+                      style={{ marginLeft: 6 }}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
                 </div>
               </div>
@@ -890,6 +1024,59 @@ export function ProfilePage() {
           ))}
         </div>
       </section>
+
+      {editingProduct && (
+        <div className="comments-overlay" role="presentation" onClick={handleCancelEdit}>
+          <div className="comments-card" role="dialog" aria-modal="true" aria-label={`Edit ${editingProduct.name}`} onClick={(event) => event.stopPropagation()}>
+            <div className="comments-header">
+              <div>
+                <p className="eyebrow">Edit Product</p>
+                <h2>{editingProduct.name}</h2>
+              </div>
+              <button className="comments-close" type="button" onClick={handleCancelEdit} aria-label="Close">
+                ×
+              </button>
+            </div>
+<div className="comments-body">
+              <div className="edit-popup-field">
+                <label>Price (KSh)</label>
+                <input
+                  type="number"
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  placeholder="Enter price"
+                />
+              </div>
+              <div className="edit-popup-field">
+                <label>Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Enter description"
+                />
+              </div>
+              <div className="edit-field">
+                <label>Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Description"
+                  rows={4}
+                />
+              </div>
+            </div>
+            <div className="comments-composer">
+              <button
+                className="primary-button comments-submit"
+                type="button"
+                onClick={handleSaveEdit}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

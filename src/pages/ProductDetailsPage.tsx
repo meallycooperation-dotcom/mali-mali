@@ -243,7 +243,41 @@ export function ProductDetailsPage() {
   }
 
   return (
-    <section className="page page-product-details">
+    <>
+      {product && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Product',
+              name: product.name,
+              description: product.description || '',
+              image: mainImageUrl || '',
+              offers: {
+                '@type': 'Offer',
+                price: product.price,
+                priceCurrency: 'KES',
+                availability: product.status === 'active' 
+                  ? 'https://schema.org/InStock' 
+                  : 'https://schema.org/SoldOut',
+              },
+              seller: {
+                '@type': 'Organization',
+                name: displayName || 'Mali Mali Seller',
+              },
+            }),
+          }}
+        />
+      )}
+      <section className="page page-product-details">
+      {product && (
+        <div className="breadcrumb">
+          <Link to="/">Home</Link>
+          <span className="breadcrumb-separator">›</span>
+          <span>{product.name}</span>
+        </div>
+      )}
       <div className="detail-topbar">
         <Link to="/" className="back-icon-link" aria-label="Back to marketplace">
           <ArrowLeft size={20} />
@@ -359,5 +393,6 @@ export function ProductDetailsPage() {
         </div>
       ) : null}
     </section>
+    </>
   )
 }
