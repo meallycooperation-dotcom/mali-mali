@@ -2340,3 +2340,22 @@
   color: var(--text);
   font-weight: 500;
 }
+
+/* Post stats (likes/comments) */
+.market-post-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Profile card footer */
+.market-card-footer {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--muted);
+}

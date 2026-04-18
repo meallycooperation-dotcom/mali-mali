@@ -7,7 +7,8 @@ import {
   type FormEvent,
 } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Upload, LogOut } from 'lucide-react'
+import { Upload, LogOut, Heart, MessageCircle } from 'lucide-react'
+import { formatDateTime } from '../utils/formatDate'
 import imageCompression from 'browser-image-compression'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
@@ -34,6 +35,9 @@ type UserProductRecord = {
   created_at: string | null
   image_url: string | null
   user_id: string
+  likes_count: number
+  comments_count: number
+  liked_by_me: boolean
 }
 
 type ProductCondition = 'A' | 'B' | 'C'
@@ -216,6 +220,62 @@ export function ProfilePage() {
   const [conversationError, setConversationError] = useState('')
   const [startingConversation, setStartingConversation] = useState(false)
   const [editingProduct, setEditingProduct] = useState<UserProductRecord | null>(null)
+  // Comment modal state for product comments in profile view
+  const [commentModalProductId, setCommentModalProductId] = useState<string | null>(null)
+  const [modalComments, setModalComments] = useState<Array<any>>([])
+  const [modalLoading, setModalLoading] = useState(false)
+  const [modalComment, setModalComment] = useState('')
+  const openCommentsForProduct = (pid: string) => {
+    setCommentModalProductId(pid)
+    void loadComments(pid)
+  }
+  const closeCommentsModal = () => {
+    setCommentModalProductId(null)
+    setModalComments([])
+    setModalComment('')
+  }
+  const loadComments = async (pid: string) => {
+    const client = supabase
+    if (!client || !pid) return
+    setModalLoading(true)
+    try {
+      const { data: comments } = await client.from('comments').select('id, user_id, content, created_at').eq('product_id', pid).order('created_at', { ascending: true })
+      const userIds = Array.from(new Set((comments ?? []).map((c: any) => c.user_id).filter(Boolean)))
+      let profiles: any[] = []
+      if (userIds.length > 0) {
+        const { data } = await client.from('profiles').select('id, full_name, avatar_url').in('id', userIds)
+        profiles = data ?? []
+      }
+      const map: Record<string, { name: string; avatar_url: string | null }> = {}
+      profiles.forEach((p) => {
+        map[p.id] = { name: p.full_name, avatar_url: p.avatar_url ?? null }
+      })
+      const enriched = (comments ?? []).map((c: any) => ({
+        ...c,
+        user_name: map[c.user_id]?.name ?? c.user_id,
+        user_avatar_url: map[c.user_id]?.avatar_url ?? null,
+      }))
+      setModalComments(enriched)
+    } catch (err) {
+      console.error('Error loading comments', err)
+    } finally {
+      setModalLoading(false)
+    }
+  }
+  const addComment = async () => {
+    if (!user?.id || !commentModalProductId) return
+    const text = modalComment.trim()
+    if (!text) return
+    try {
+      const { error } = await (supabase as any).from('comments').insert({ product_id: commentModalProductId, user_id: user!.id, content: text })
+      if (!error) {
+        setModalComment('')
+        await loadComments(commentModalProductId)
+      }
+    } catch (err) {
+      console.error('Error adding comment', err)
+    }
+  }
   const [editPrice, setEditPrice] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const fileInputRefs = useRef<Array<HTMLInputElement | null>>([])
@@ -267,11 +327,11 @@ export function ProfilePage() {
     }
 
     setLoadingProducts(true)
-    const { data, error } = await client
+
+    // Fetch products with counts
+    const { data: productRows, error } = await client
       .from('products')
-      .select(
-        'id, name, description, price, location, condition, status, created_at, image_url, user_id',
-      )
+      .select('id, name, description, price, location, condition, status, created_at, image_url, user_id')
       .eq('user_id', viewedProfileId)
       .order('created_at', { ascending: false })
 
@@ -279,8 +339,43 @@ export function ProfilePage() {
       console.error('Failed to load user posts:', error)
     }
 
-    const products = (data ?? []) as UserProductRecord[]
-    setMyProducts(products)
+    const products = (productRows ?? []) as UserProductRecord[]
+    const productIds = products.map(p => p.id)
+
+    // Get likes count
+    const { data: likeData } = productIds.length > 0
+      ? await client.from('likes').select('product_id, user_id').in('product_id', productIds)
+      : { data: [] }
+
+    const likeCounts: Record<string, number> = {}
+    const likedByMe = new Set<string>()
+    likeData?.forEach(like => {
+      if (like.product_id) {
+        likeCounts[like.product_id] = (likeCounts[like.product_id] || 0) + 1
+        if (like.user_id === user?.id) likedByMe.add(like.product_id)
+      }
+    })
+
+    // Get comments count
+    const { data: commentData } = productIds.length > 0
+      ? await client.from('comments').select('product_id').in('product_id', productIds)
+      : { data: [] }
+
+    const commentCounts: Record<string, number> = {}
+    commentData?.forEach(comment => {
+      if (comment.product_id) {
+        commentCounts[comment.product_id] = (commentCounts[comment.product_id] || 0) + 1
+      }
+    })
+
+    const productsWithCounts = products.map(p => ({
+      ...p,
+      likes_count: likeCounts[p.id] || 0,
+      comments_count: commentCounts[p.id] || 0,
+      liked_by_me: likedByMe.has(p.id)
+    }))
+
+    setMyProducts(productsWithCounts)
     // Fetch seller profiles for avatars
     const userIds = Array.from(new Set(products.map((p) => p.user_id)))
     if (userIds.length > 0) {
@@ -657,8 +752,8 @@ export function ProfilePage() {
             <p className="eyebrow">{pageTitle}</p>
             <h1>{displayName}</h1>
             <div className="profile-hero-details">
-              {profile?.email && <span className="profile-hero-detail">✉ {profile.email}</span>}
-              {profile?.phone && <span className="profile-hero-detail">📞 {profile.phone}</span>}
+              {isViewingOwnProfile && profile?.email && <span className="profile-hero-detail">✉ {profile.email}</span>}
+              {isViewingOwnProfile && profile?.phone && <span className="profile-hero-detail">📞 {profile.phone}</span>}
               {profile?.location && <span className="profile-hero-detail">📍 {profile.location}</span>}
             </div>
           </div>
@@ -904,11 +999,10 @@ export function ProfilePage() {
         ) : null}
 
         <div className="profile-posts-grid">
-            {myProducts.map((product) => (
-            <Link
+        {myProducts.map((product) => (
+            <div
               key={product.id}
-              to={`/product/${product.id}`}
-              className="market-card market-card-link profile-post-card"
+              className="market-card profile-post-card"
             >
               <div className="market-post-header">
                 <div className="market-post-author" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -949,36 +1043,49 @@ export function ProfilePage() {
                       </button>
                     )
                   )}
-                <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8 }}>
-                  <button
-                    type="button"
-                    className="edit-pill"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartEdit(product) }}
-                    aria-label="Edit product"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="sold-pill"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSold(product.id) }}
-                    aria-label={product.status === 'sold' ? 'Mark as active' : 'Mark as sold'}
-                    style={{ marginLeft: 6 }}
-                  >
-                    {product.status === 'sold' ? 'Sold' : 'Mark Sold'}
-                  </button>
-                  {product.status === 'sold' && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8 }}>
+                {isViewingOwnProfile && (
+                  <>
                     <button
                       type="button"
-                      className="delete-pill"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProduct(product.id) }}
-                      aria-label="Delete product"
+                      className="edit-pill"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartEdit(product) }}
+                      aria-label="Edit product"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="edit-pill"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/product/${product.id}`) }}
+                      aria-label="View product"
                       style={{ marginLeft: 6 }}
                     >
-                      Delete
+                      View product
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      className="sold-pill"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSold(product.id) }}
+                      aria-label={product.status === 'sold' ? 'Mark as active' : 'Mark as sold'}
+                      style={{ marginLeft: 6 }}
+                    >
+                      {product.status === 'sold' ? 'Sold' : 'Mark Sold'}
+                    </button>
+                    {product.status === 'sold' && (
+                      <button
+                        type="button"
+                        className="delete-pill"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProduct(product.id) }}
+                        aria-label="Delete product"
+                        style={{ marginLeft: 6 }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
                 </div>
               </div>
 
@@ -992,6 +1099,23 @@ export function ProfilePage() {
                 ) : (
                   <div className="market-image market-image-placeholder">No image</div>
                 )}
+              </div>
+
+              <div className="market-card-footer" aria-label="Product interactions">
+                <span className="market-action-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Heart size={16} />
+                  {product.likes_count} like{product.likes_count === 1 ? '' : 's'}
+                </span>
+                <button
+                  type="button"
+                  className="edit-pill"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); openCommentsForProduct(product.id) }}
+                  aria-label="View comments"
+                  style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <MessageCircle size={16} />
+                  {product.comments_count} comment{product.comments_count === 1 ? '' : 's'}
+                </button>
               </div>
 
               <div className="market-card-body">
@@ -1020,12 +1144,12 @@ export function ProfilePage() {
                   <strong>{product.status ?? 'active'}</strong>
                 </div>
               </div>
-            </Link>
-          ))}
+            </div>
+        ))}
         </div>
       </section>
 
-      {editingProduct && (
+      {editingProduct && isViewingOwnProfile && (
         <div className="comments-overlay" role="presentation" onClick={handleCancelEdit}>
           <div className="comments-card" role="dialog" aria-modal="true" aria-label={`Edit ${editingProduct.name}`} onClick={(event) => event.stopPropagation()}>
             <div className="comments-header">
@@ -1077,6 +1201,67 @@ export function ProfilePage() {
           </div>
         </div>
       )}
+
+      {commentModalProductId && (
+        <div className="comments-overlay" role="presentation" onClick={closeCommentsModal}>
+          <div
+            className="comments-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Comments"
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'flex', flexDirection: 'column', height: '60vh', width: '90%', maxWidth: 720, margin: '6vh auto' }}
+          >
+            <div className="comments-header" style={{ padding: 12, borderBottom: '1px solid #eee' }}>
+              <div>
+                <p className="eyebrow">Comments</p>
+                <h2>Product Comments</h2>
+              </div>
+              <button className="comments-close" type="button" onClick={closeCommentsModal} aria-label="Close">×</button>
+            </div>
+            <div className="comments-body" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+              {modalLoading ? (
+                <p>Loading comments...</p>
+              ) : modalComments.length === 0 ? (
+                <p>No comments yet.</p>
+              ) : (
+                modalComments.map((c) => (
+                  <div key={c.id} className="comment-item" style={{ display: 'flex', gap: 8, padding: '6px 0' }}>
+                    <div className="comment-avatar" style={{ width: 28, height: 28, borderRadius: 14, background: '#ddd', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {(c.user_name?.split(' ').map((n: string) => n.charAt(0)).slice(0, 2).join('') ?? 'U').toUpperCase()}
+                    </div>
+                    <div className="comment-content" style={{ flex: 1 }}>
+                      <div className="comment-meta" style={{ fontSize: 12, color: '#666' }}>
+                        {c.user_name ?? 'User'} • {formatDateTime(c.created_at)}
+                      </div>
+                      <div className="comment-text" style={{ marginTop: 2 }}>{c.content}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="comments-composer" style={{ padding: 8, borderTop: '1px solid #eee' }}>
+              {user ? (
+                <>
+                  <textarea
+                    value={modalComment}
+                    onChange={(e) => setModalComment(e.target.value)}
+                    placeholder="Write a comment..."
+                    rows={3}
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                  <button className="primary-button comments-submit" type="button" onClick={addComment} style={{ marginTop: 6 }}>
+                    Comment
+                  </button>
+                </>
+              ) : (
+                <p>Sign in to leave a comment.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </section>
   )
 }

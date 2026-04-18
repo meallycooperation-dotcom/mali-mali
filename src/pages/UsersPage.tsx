@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Search } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -13,8 +14,10 @@ type ProfileRecord = {
 
 export function UsersPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
-  const query = (searchParams.get('q') ?? '').toLowerCase().trim()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const query = (searchParams.get('q') ?? '').trim()
+  // local toggle for showing the search input
+  const [showSearch, setShowSearch] = useState(false)
   const [profiles, setProfiles] = useState<ProfileRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -105,16 +108,40 @@ export function UsersPage() {
       .slice(0, 2)
   }
 
+  // derived filtered query in lowercase for matching
+  const queryLower = query.toLowerCase()
   const filteredProfiles = profiles.filter((p) => {
-    if (!query) return true
-    return p.full_name.toLowerCase().includes(query)
+    if (!queryLower) return true
+    return p.full_name.toLowerCase().includes(queryLower)
   })
 
   return (
     <section className="page page-users">
-      <div className="page-header">
-        <h1>Users</h1>
-        <p>Discover and follow other users</p>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1>Users</h1>
+          <p>Discover and follow other users</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {showSearch && (
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setSearchParams({ q: e.target.value })}
+              placeholder="Search users..."
+              aria-label="Search users"
+              style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #ccc' }}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowSearch((s) => !s)}
+            aria-label="Toggle search"
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+          >
+            <Search size={18} />
+          </button>
+        </div>
       </div>
 
       {loading ? <p className="market-status">Loading users...</p> : null}

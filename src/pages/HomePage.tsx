@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { MessageCircle, ThumbsUp, X } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
+import { formatDateTime } from '../utils/formatDate'
 import { supabase } from '../lib/supabase'
 
 type ProductRow = {
@@ -88,24 +89,7 @@ const getInitials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
 
-const formatCommentTime = (value: string | null) => {
-  if (!value) {
-    return 'Recently'
-  }
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Recently'
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
-}
 
 export function HomePage() {
   const { user } = useAuth()
@@ -592,24 +576,25 @@ export function HomePage() {
     )
   }
 
-  const filteredProducts = query
-    ? products.filter((product) => {
-        const conditionLabel = product.condition
-          ? CONDITION_LABELS[product.condition] ?? product.condition
-          : ''
-        const haystack = [
-          product.name,
-          product.description ?? '',
-          product.location ?? '',
-          product.seller_name,
-          conditionLabel,
-        ]
-          .join(' ')
-          .toLowerCase()
+  const filteredProducts = products
+    .filter(product => user?.id ? product.user_id !== user.id : true)
+    .filter((product) => {
+      if (!query) return true
+      const conditionLabel = product.condition
+        ? CONDITION_LABELS[product.condition] ?? product.condition
+        : ''
+      const haystack = [
+        product.name,
+        product.description ?? '',
+        product.location ?? '',
+        product.seller_name,
+        conditionLabel,
+      ]
+        .join(' ')
+        .toLowerCase()
 
-        return haystack.includes(query)
-      })
-    : products
+      return haystack.includes(query)
+    })
 
   return (
     <section className="page page-home">
@@ -820,7 +805,7 @@ export function HomePage() {
               </button>
             </div>
 
-            <div className="comments-body">
+            <div className="comments-body" style={{ maxHeight: '40vh', overflowY: 'auto', padding: '8px' }}>
               {commentsLoading ? (
                 <p className="comments-empty">Loading comments...</p>
               ) : comments.length === 0 ? (
@@ -837,7 +822,7 @@ export function HomePage() {
                           <strong>{comment.commenter_name}</strong>
                           <p>{comment.content}</p>
                         </div>
-                        <small>{formatCommentTime(comment.created_at)}</small>
+                        <small>{formatDateTime(comment.created_at)}</small>
                       </div>
                     </article>
                   ))}
@@ -849,7 +834,7 @@ export function HomePage() {
               <p className="comments-error">{commentError}</p>
             ) : null}
 
-            <div className="comments-composer">
+              <div className="comments-composer">
               {!user ? (
                 <p className="comments-note">Sign in to write a comment.</p>
               ) : null}

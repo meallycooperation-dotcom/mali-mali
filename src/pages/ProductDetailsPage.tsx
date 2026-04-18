@@ -340,17 +340,21 @@ export function ProductDetailsPage() {
             </div>
 
             <div className="detail-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setShowQuickMessage(true)}
-              >
-                <MessageCircle size={18} />
-                Quick message
-              </button>
-              <Link to="/" className="ghost-button">
-                Back to listings
-              </Link>
+              {product?.user_id && user && product.user_id !== user.id ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setShowQuickMessage(true)}
+                >
+                  <MessageCircle size={18} />
+                  Quick message
+                </button>
+              ) : null}
+              {product?.user_id && user && product.user_id === user.id ? (
+                <Link to="/profile" className="ghost-button">Back to profile</Link>
+              ) : (
+                <Link to="/" className="ghost-button">Back to listings</Link>
+              )}
             </div>
           </div>
         </article>
@@ -358,7 +362,7 @@ export function ProductDetailsPage() {
 
       {showQuickMessage && product ? (
         <div className="comments-overlay" role="presentation" onClick={() => setShowQuickMessage(false)}>
-          <div className="comments-card" role="dialog" aria-modal="true" aria-label={`Message ${displayName}`} onClick={(event) => event.stopPropagation()}>
+          <div className="comments-card" role="dialog" aria-modal="true" aria-label={`Message ${displayName}`} onClick={(event) => event.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', height: '60vh', width: '90%', maxWidth: 720, margin: '6vh auto' }}>
             <div className="comments-header">
               <div>
                 <p className="eyebrow">Message Seller</p>
@@ -368,7 +372,7 @@ export function ProductDetailsPage() {
                 <X size={18} />
               </button>
             </div>
-            <div className="comments-body">
+            <div className="comments-body" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
               <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>About: {product.name}</p>
               <textarea
                 className="comments-input"
@@ -379,7 +383,7 @@ export function ProductDetailsPage() {
               />
               {quickMessageError ? <p className="comments-error">{quickMessageError}</p> : null}
             </div>
-            <div className="comments-composer">
+            <div className="comments-composer" style={{ padding: 8, borderTop: '1px solid #eee' }}>
               <button
                 className="primary-button comments-submit"
                 type="button"
