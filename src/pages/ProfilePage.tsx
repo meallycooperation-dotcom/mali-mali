@@ -796,31 +796,7 @@ export function ProfilePage() {
             Logout
           </button>
         </div>
-      ) : (
-          <div className="profile-actions profile-actions-row">
-            {user ? (
-              <button
-                className="primary-button profile-message-button"
-                type="button"
-                onClick={startConversationWithSeller}
-                disabled={startingConversation}
-              >
-                {startingConversation ? 'Opening chat...' : 'Message seller'}
-              </button>
-            ) : (
-              <div className="profile-message-wrap">
-                <button className="primary-button profile-message-button" type="button" disabled>
-                  Message seller
-                </button>
-                {!user ? (
-                  <small className="profile-message-note">
-                    Sign in to message this seller.
-                  </small>
-                ) : null}
-              </div>
-            )}
-          </div>
-        )}
+      ) : null}
       </div>
 
       {conversationError ? (
@@ -1044,6 +1020,14 @@ export function ProfilePage() {
                     )
                   )}
               <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 8 }}>
+                <button
+                  type="button"
+                  className="edit-pill"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/product/${product.id}`) }}
+                  aria-label="View product"
+                >
+                  View product
+                </button>
                 {isViewingOwnProfile && (
                   <>
                     <button
@@ -1051,17 +1035,9 @@ export function ProfilePage() {
                       className="edit-pill"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleStartEdit(product) }}
                       aria-label="Edit product"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="edit-pill"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/product/${product.id}`) }}
-                      aria-label="View product"
                       style={{ marginLeft: 6 }}
                     >
-                      View product
+                      Edit
                     </button>
                     <button
                       type="button"
