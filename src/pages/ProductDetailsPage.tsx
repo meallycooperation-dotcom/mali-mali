@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, MessageCircle, X } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
 
@@ -37,12 +37,12 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export function ProductDetailsPage() {
   const { productId } = useParams()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const [product, setProduct] = useState<ProductRecord | null>(null)
   const [seller, setSeller] = useState<SellerRecord | null>(null)
   const [images, setImages] = useState<ProductImageRecord[]>([])
   const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [isFollowingSeller, setIsFollowingSeller] = useState(false)
   const [loading, setLoading] = useState(() => Boolean(supabase) && Boolean(productId))
   const [error, setError] = useState(() =>
     !supabase
@@ -51,10 +51,6 @@ export function ProductDetailsPage() {
         ? ''
         : 'Product not found.',
   )
-  const [showQuickMessage, setShowQuickMessage] = useState(false)
-  const [quickMessageText, setQuickMessageText] = useState('')
-  const [sendingQuickMessage, setSendingQuickMessage] = useState(false)
-  const [quickMessageError, setQuickMessageError] = useState('')
 
   useEffect(() => {
     const client = supabase
@@ -129,6 +125,28 @@ export function ProductDetailsPage() {
       setSeller((sellerData as SellerRecord | null) ?? null)
       setImages((imagesData ?? []) as ProductImageRecord[])
       setActiveImageIndex(0)
+
+      if (user?.id && productData.user_id) {
+        const { data: followData, error: followError } = await client
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+          .eq('following_id', productData.user_id)
+          .maybeSingle()
+
+        if (!isMounted) {
+          return
+        }
+
+        if (followError) {
+          console.error('Failed to load follow state:', followError)
+        }
+
+        setIsFollowingSeller(Boolean(followData))
+      } else {
+        setIsFollowingSeller(false)
+      }
+
       setLoading(false)
     }
 
@@ -137,7 +155,7 @@ export function ProductDetailsPage() {
     return () => {
       isMounted = false
     }
-  }, [productId])
+  }, [productId, user?.id])
 
   const priceText = product ? `KSh ${Number(product.price).toLocaleString()}` : ''
   const displayName = seller?.full_name ?? 'Unknown seller'
@@ -145,101 +163,38 @@ export function ProductDetailsPage() {
   const conditionLabel =
     (product?.condition && CONDITION_LABELS[product.condition]) ?? 'N/A'
 
-  const handleQuickMessage = async () => {
+  const toggleFollowSeller = async () => {
     const client = supabase
 
-    if (!client || !user || !product || !seller) {
+    if (!client || !user?.id || !product?.user_id || product.user_id === user.id) {
       return
     }
 
-    const trimmedMessage = quickMessageText.trim()
-      ? `Is "${product.name}" still available?\n\n${quickMessageText.trim()}`
-      : `Is "${product.name}" still available?`
+    if (isFollowingSeller) {
+      const { error: unfollowError } = await client
+        .from('follows')
+        .delete()
+        .match({ follower_id: user.id, following_id: product.user_id })
 
-    if (!trimmedMessage) {
+      if (unfollowError) {
+        console.error('Failed to unfollow seller:', unfollowError)
+        return
+      }
+
+      setIsFollowingSeller(false)
       return
     }
 
-    setSendingQuickMessage(true)
-    setQuickMessageError('')
+    const { error: followError } = await client
+      .from('follows')
+      .insert({ follower_id: user.id, following_id: product.user_id })
 
-    try {
-      const [{ data: myParticipantData, error: myParticipantError }, { data: sellerParticipantData, error: sellerParticipantError }] =
-        await Promise.all([
-          client
-            .from('conversation_participants')
-            .select('conversation_id')
-            .eq('user_id', user.id),
-          client
-            .from('conversation_participants')
-            .select('conversation_id')
-            .eq('user_id', seller.id),
-        ])
-
-      if (myParticipantError || sellerParticipantError) {
-        throw new Error(myParticipantError?.message ?? sellerParticipantError?.message ?? '')
-      }
-
-      const myConversationIds = new Set(
-        (myParticipantData ?? []).map((row) => row.conversation_id),
-      )
-      const existingConversation = (sellerParticipantData ?? []).find((row) =>
-        myConversationIds.has(row.conversation_id),
-      )
-
-      let conversationId: string
-
-      if (existingConversation) {
-        conversationId = existingConversation.conversation_id
-      } else {
-        const { data: conversationData, error: conversationError } = await client
-          .from('conversations')
-          .insert({ product_id: product.id })
-          .select('id')
-          .single()
-
-        if (conversationError) {
-          throw new Error(conversationError.message)
-        }
-
-        conversationId = conversationData.id
-
-        const { error: participantInsertError } = await client
-          .from('conversation_participants')
-          .insert([
-            { conversation_id: conversationId, user_id: user.id },
-            { conversation_id: conversationId, user_id: seller.id },
-          ])
-
-        if (participantInsertError) {
-          throw new Error(participantInsertError.message)
-        }
-      }
-
-      const { error: sendError } = await client.from('messages').insert({
-        conversation_id: conversationId,
-        sender_id: user.id,
-        content: trimmedMessage,
-        image_url: null,
-        is_read: false,
-      })
-
-      if (sendError) {
-        throw new Error(sendError.message)
-      }
-
-      await client
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId)
-
-      setShowQuickMessage(false)
-      navigate(`/inbox/${conversationId}`)
-    } catch (err) {
-      setQuickMessageError(err instanceof Error ? err.message : 'Failed to send message')
-    } finally {
-      setSendingQuickMessage(false)
+    if (followError) {
+      console.error('Failed to follow seller:', followError)
+      return
     }
+
+    setIsFollowingSeller(true)
   }
 
   return (
@@ -343,11 +298,10 @@ export function ProductDetailsPage() {
               {product?.user_id && user && product.user_id !== user.id ? (
                 <button
                   type="button"
-                  className="ghost-button"
-                  onClick={() => setShowQuickMessage(true)}
+                  className={isFollowingSeller ? 'follow-pill following' : 'follow-pill'}
+                  onClick={toggleFollowSeller}
                 >
-                  <MessageCircle size={18} />
-                  Quick message
+                  {isFollowingSeller ? 'Following' : 'Follow seller'}
                 </button>
               ) : null}
               {product?.user_id && user && product.user_id === user.id ? (
@@ -360,42 +314,6 @@ export function ProductDetailsPage() {
         </article>
       ) : null}
 
-      {showQuickMessage && product ? (
-        <div className="comments-overlay" role="presentation" onClick={() => setShowQuickMessage(false)}>
-          <div className="comments-card" role="dialog" aria-modal="true" aria-label={`Message ${displayName}`} onClick={(event) => event.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', height: '60vh', width: '90%', maxWidth: 720, margin: '6vh auto' }}>
-            <div className="comments-header">
-              <div>
-                <p className="eyebrow">Message Seller</p>
-                <h2>{displayName}</h2>
-              </div>
-              <button className="comments-close" type="button" onClick={() => setShowQuickMessage(false)} aria-label="Close">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="comments-body" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-              <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>About: {product.name}</p>
-              <textarea
-                className="comments-input"
-                value={quickMessageText}
-                onChange={(e) => setQuickMessageText(e.target.value)}
-                placeholder="Add a personal message (optional)..."
-                rows={3}
-              />
-              {quickMessageError ? <p className="comments-error">{quickMessageError}</p> : null}
-            </div>
-            <div className="comments-composer" style={{ padding: 8, borderTop: '1px solid #eee' }}>
-              <button
-                className="primary-button comments-submit"
-                type="button"
-                onClick={handleQuickMessage}
-                disabled={sendingQuickMessage}
-              >
-                {sendingQuickMessage ? 'Sending...' : 'Send Message'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
     </>
   )
