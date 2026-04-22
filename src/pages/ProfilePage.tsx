@@ -217,8 +217,6 @@ export function ProfilePage() {
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [productMessage, setProductMessage] = useState('')
   const [productError, setProductError] = useState('')
-  const [conversationError, setConversationError] = useState('')
-  const [startingConversation, setStartingConversation] = useState(false)
   const [editingProduct, setEditingProduct] = useState<UserProductRecord | null>(null)
   // Comment modal state for product comments in profile view
   const [commentModalProductId, setCommentModalProductId] = useState<string | null>(null)
@@ -630,78 +628,6 @@ export function ProfilePage() {
     }
   }
 
-  const startConversationWithSeller = async () => {
-    const client = supabase
-
-    if (!client || !user || !viewedProfileId || viewedProfileId === user.id) {
-      return
-    }
-
-    setStartingConversation(true)
-    setConversationError('')
-
-    const [{ data: myParticipantData, error: myParticipantError }, { data: sellerParticipantData, error: sellerParticipantError }] =
-      await Promise.all([
-        client
-          .from('conversation_participants')
-          .select('conversation_id')
-          .eq('user_id', user.id),
-        client
-          .from('conversation_participants')
-          .select('conversation_id')
-          .eq('user_id', viewedProfileId),
-      ])
-
-    if (myParticipantError || sellerParticipantError) {
-      setStartingConversation(false)
-      setConversationError(
-        myParticipantError?.message ?? sellerParticipantError?.message ?? '',
-      )
-      return
-    }
-
-    const myConversationIds = new Set(
-      (myParticipantData ?? []).map((row) => row.conversation_id),
-    )
-    const existingConversationId = (sellerParticipantData ?? []).find((row) =>
-      myConversationIds.has(row.conversation_id),
-    )?.conversation_id
-
-    if (existingConversationId) {
-      navigate(`/inbox/${existingConversationId}`)
-      return
-    }
-
-    const { data: conversationData, error: conversationError } = await client
-      .from('conversations')
-      .insert({ product_id: null })
-      .select('id')
-      .single()
-
-    if (conversationError) {
-      setStartingConversation(false)
-      setConversationError(conversationError.message)
-      return
-    }
-
-    const conversationId = conversationData.id
-    const { error: participantInsertError } = await client
-      .from('conversation_participants')
-      .insert([
-        { conversation_id: conversationId, user_id: user.id },
-        { conversation_id: conversationId, user_id: viewedProfileId },
-      ])
-
-    if (participantInsertError) {
-      setStartingConversation(false)
-      setConversationError(participantInsertError.message)
-      return
-    }
-
-    setStartingConversation(false)
-    navigate(`/inbox/${conversationId}`)
-  }
-
   const displayName =
     (isViewingOwnProfile
       ? profile?.full_name ??
@@ -798,10 +724,6 @@ export function ProfilePage() {
         </div>
       ) : null}
       </div>
-
-      {conversationError ? (
-        <p className="market-status market-status-error">{conversationError}</p>
-      ) : null}
 
       {/* Removed the profile-summary-card as details are now in the hero */}
 
