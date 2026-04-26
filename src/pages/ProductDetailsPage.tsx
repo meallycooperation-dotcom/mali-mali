@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { supabase } from '../lib/supabase'
@@ -38,11 +38,11 @@ const CONDITION_LABELS: Record<string, string> = {
 export function ProductDetailsPage() {
   const { productId } = useParams()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [product, setProduct] = useState<ProductRecord | null>(null)
   const [seller, setSeller] = useState<SellerRecord | null>(null)
   const [images, setImages] = useState<ProductImageRecord[]>([])
   const [activeImageIndex, setActiveImageIndex] = useState(0)
-  const [isFollowingSeller, setIsFollowingSeller] = useState(false)
   const [loading, setLoading] = useState(() => Boolean(supabase) && Boolean(productId))
   const [error, setError] = useState(() =>
     !supabase
@@ -126,27 +126,6 @@ export function ProductDetailsPage() {
       setImages((imagesData ?? []) as ProductImageRecord[])
       setActiveImageIndex(0)
 
-      if (user?.id && productData.user_id) {
-        const { data: followData, error: followError } = await client
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id)
-          .eq('following_id', productData.user_id)
-          .maybeSingle()
-
-        if (!isMounted) {
-          return
-        }
-
-        if (followError) {
-          console.error('Failed to load follow state:', followError)
-        }
-
-        setIsFollowingSeller(Boolean(followData))
-      } else {
-        setIsFollowingSeller(false)
-      }
-
       setLoading(false)
     }
 
@@ -162,40 +141,6 @@ export function ProductDetailsPage() {
   const mainImageUrl = images[activeImageIndex]?.image_url ?? product?.image_url ?? ''
   const conditionLabel =
     (product?.condition && CONDITION_LABELS[product.condition]) ?? 'N/A'
-
-  const toggleFollowSeller = async () => {
-    const client = supabase
-
-    if (!client || !user?.id || !product?.user_id || product.user_id === user.id) {
-      return
-    }
-
-    if (isFollowingSeller) {
-      const { error: unfollowError } = await client
-        .from('follows')
-        .delete()
-        .match({ follower_id: user.id, following_id: product.user_id })
-
-      if (unfollowError) {
-        console.error('Failed to unfollow seller:', unfollowError)
-        return
-      }
-
-      setIsFollowingSeller(false)
-      return
-    }
-
-    const { error: followError } = await client
-      .from('follows')
-      .insert({ follower_id: user.id, following_id: product.user_id })
-
-    if (followError) {
-      console.error('Failed to follow seller:', followError)
-      return
-    }
-
-    setIsFollowingSeller(true)
-  }
 
   return (
     <>
@@ -298,10 +243,10 @@ export function ProductDetailsPage() {
               {product?.user_id && user && product.user_id !== user.id ? (
                 <button
                   type="button"
-                  className={isFollowingSeller ? 'follow-pill following' : 'follow-pill'}
-                  onClick={toggleFollowSeller}
+                  className="follow-pill"
+                  onClick={() => navigate('/inbox')}
                 >
-                  {isFollowingSeller ? 'Following' : 'Follow seller'}
+                  Message seller
                 </button>
               ) : null}
               {product?.user_id && user && product.user_id === user.id ? (
